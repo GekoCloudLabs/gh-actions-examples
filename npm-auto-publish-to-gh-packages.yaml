@@ -1,0 +1,54 @@
+# DISCLAIMER:
+---
+name: Component
+
+on:
+  push:
+    branches:
+    - develop
+
+
+env:
+  # Access token with the packages:read scope
+  AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN  }}
+  # From https://docs.github.com/en/rest/reference/packages#get-all-package-versions-for-a-package-owned-by-an-organization
+  PKG_ORGANIZATION: my-gh-org-name
+  PKG_TYPE: npm
+  PKG_NAME: component-name
+
+
+jobs:
+  build:
+    name: Generate & Publish
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Initial checkout
+      uses: actions/checkout@v2
+      with:
+          fetch-depth: 0
+
+    - name: Get current (local) component version
+      id: package-version
+      uses: martinbeentjes/npm-get-version-action@master
+
+    - name: Print component version
+      run: |
+        echo CURRENT: ${{ steps.package-version.outputs.current-version}}
+
+    - name: Get last uploaded-component's version
+      run: |
+        LATEST=$(curl -s \
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Authorization: Bearer $AUTH_TOKEN" \
+          https://api.github.com/orgs/${PKG_ORGANIZATION}/packages/${PKG_TYPE}/${PKG_NAME}/versions | \
+          jq .[].name -r | sort -rV | head -1)
+        echo "LATEST=$LATEST" >> $GITHUB_ENV
+        echo LATEST: $LATEST
+
+    - name: NPM Build & Publish
+      if: steps.package-version.outputs.current-version != env.LATEST
+      run: |
+        npm install
+        npm run build
+        npm publish
